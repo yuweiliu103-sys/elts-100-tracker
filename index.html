@@ -30,7 +30,22 @@ $('copy').onclick=async()=>{const r=get(selected);const s=`IELTS ${selected}\n`+
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify({version:1,start,records,exported_at:new Date().toISOString()},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='IELTS_100days_'+iso(new Date())+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 $('import').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!data.records||typeof data.records!=='object'||!/^\d{4}-\d\d-\d\d$/.test(data.start))throw Error('备份格式不正确');const entries=Object.entries(data.records).filter(([k,v])=>/^\d{4}-\d\d-\d\d$/.test(k)&&v&&typeof v==='object');if(!confirm(`确定导入${entries.length}天记录吗？相同日期的云端记录会被覆盖。`))return;status('正在导入…');const {error:pe}=await client.from('ielts_profiles').upsert({user_id:user.id,start_date:data.start,updated_at:new Date().toISOString()});if(pe)throw pe;for(let i=0;i<entries.length;i+=50){const batch=entries.slice(i,i+50).map(([k,v])=>({user_id:user.id,study_date:k,tasks:v.tasks||{},daily_note:v.daily_note||'',updated_at:new Date().toISOString()}));const {error:re}=await client.from('ielts_daily_records').upsert(batch,{onConflict:'user_id,study_date'});if(re)throw re}await load();status('导入完成')}catch(err){error(err)}finally{e.target.value=''}};
 $('login').onclick=async()=>{const {error:e}=await client.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});$('message').textContent=e?'登录失败：'+e.message:'登录成功，正在加载…'};
-$('signup').onclick=async()=>{const {error:e}=await client.auth.signUp({email:$('email').value.trim(),password:$('password').value,emailRedirectTo:location.origin+location.pathname});$('message').textContent=e?'注册失败：'+e.message:'注册请求已提交。如开启邮箱验证，请查看邮件后再登录。'};
+$('signup').onclick = async () => {
+  const email = $('email').value.trim();
+  const password = $('password').value;
+
+  const { data, error } = await client.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+      emailRedirectTo: location.origin + location.pathname
+    }
+  });
+
+  $('message').textContent = error
+    ? '注册失败：' + error.message
+    : '注册请求已提交，请查看验证邮件。';
+};
 $('logout').onclick=async()=>{await client.auth.signOut();user=null;records={};$('app').classList.add('hidden');$('authPanel').classList.remove('hidden')};
 const cfg=window.IELTS_CONFIG;if(!cfg||!cfg.supabaseUrl||cfg.supabaseUrl.includes('YOUR_')||!cfg.supabaseAnonKey||cfg.supabaseAnonKey.includes('YOUR_')||!window.supabase){$('setup').classList.remove('hidden');return}client=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);client.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>showSession(session),0)});client.auth.getSession().then(({data})=>showSession(data.session)).catch(error);
 })();
